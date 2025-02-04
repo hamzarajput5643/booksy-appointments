@@ -1,0 +1,82 @@
+.container-fluid {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.card {
+  max-width: 400px;
+  width: 100%;
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.input-group-text {
+  position: absolute;
+  left: 10px;
+  z-index: 5;
+  background: transparent !important;
+  border: none;
+}
+
+.form-control {
+  width: 100%;
+  padding: 10px;
+  padding-left: 2.5rem;
+}
+
+/* Button Styling */
+.btn-primary {
+  width: 100%;
+  font-weight: bold;
+  border-radius: 50px;
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .card {
+    width: 90%;
+    padding: 15px;
+  }
+
+  .form-control {
+    font-size: 14px;
+    padding: 8px;
+  }
+
+  .btn-primary {
+    font-size: 14px;
+    padding: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .form-control {
+    font-size: 12px;
+    padding: 8px;
+    padding-left: 1.5rem;
+  }
+
+  .input-group-text {
+    left: 5px;
+  }
+
+  .btn-primary {
+    font-size: 14px;
+    padding: 10px;
+  }
+}

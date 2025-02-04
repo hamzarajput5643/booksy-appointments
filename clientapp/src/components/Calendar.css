@@ -1,0 +1,64 @@
+.calendar-grid {
+    display: grid;
+    grid-template-columns: 100px repeat(7, 1fr);
+    gap: 1px;
+    background: #eee;
+    overflow-x: auto;
+}
+
+.time-column {
+    grid-row: 2 / -1;
+    position: sticky;
+    left: 0;
+    background: white;
+    z-index: 2;
+    box-shadow: 2px 0 3px rgba(0, 0, 0, 0.1);
+}
+
+.day-column {
+    display: contents;
+}
+
+.day-header {
+    position: sticky;
+    top: 0;
+    background: white;
+    padding: 1rem;
+    text-align: center;
+    font-weight: 500;
+    z-index: 1;
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.1);
+}
+
+.time-slot {
+    position: relative;
+    height: 60px;
+    min-width: 150px;
+    background: white;
+    border-bottom: 1px solid #eee;
+}
+
+.booking-event {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    background: #f0f9ff;
+    border-left: 3px solid #38bdf8;
+    overflow: hidden;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+}
+
+.booking-event:hover {
+    transform: scale(1.01);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.event-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
