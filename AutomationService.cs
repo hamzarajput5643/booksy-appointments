@@ -9,28 +9,27 @@ namespace VoipInnovations.Core.Services
         Task<(bool success, string message)> DeactivateDID(string didNumber);
     }
 
-    public async Task<(bool success, string message)> ActivateDID(string areaCode, string organizationId, string webhookUrl, string mobileNumber)
+    public class ApiAutomationService : IApiAutomationService
+    {
+        private readonly IApiService _apiService;
+        private readonly ILogger<ApiAutomationService> _logger;
+        private readonly VoipApiConfig _voipApiConfig;
+
+        public ApiAutomationService(
+            IApiService apiService,
+            ILogger<ApiAutomationService> logger,
+            IOptions<VoipApiConfig> voipApiConfig)
+        {
+            _apiService = apiService ?? throw new ArgumentNullException(nameof(apiService));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _voipApiConfig = voipApiConfig?.Value ?? throw new ArgumentNullException(nameof(voipApiConfig));
+        }
+
+        public async Task<(bool success, string message)> ActivateDID(string areaCode, string didGroupName, string webhookUrl, string mobileNumber)
         {
             try
             {
-                // 1. Get DID Group Name from Organization
-
-                var organization = await _organizationService.GetOrganizationAsync(organizationId);
-
-                if (organization is null)
-                {
-                    _logger.LogError("Organization not found for organization: {Message}", organizationId);
-                    return (false, $"Organization not found for organization: {organizationId}");
-                }
-
-                string didGroupName = organization.DidGroupName;
-                if (string.IsNullOrEmpty(didGroupName))
-                {
-                    _logger.LogError("Organization: {organizationId} does not have DID Group Name value", organizationId);
-                    return (false, $"Organization: {organizationId} does not have DID Group Name value");
-
-                }
-                // 2. Create DID Group
+                // 1. Create DID Group
                 var createGroupResponse = await _apiService.CreateDIDGroupAsync(didGroupName);
                 if (createGroupResponse.IsFault)
                 {
@@ -45,9 +44,26 @@ namespace VoipInnovations.Core.Services
                     return (false, "DID Group creation did not return a DID Group ID");
                 }
 
+                // 2. Get available area codes from Organization
+                var getAreaCodesResult = await _organizationService.TryGetAreaCodesForOrganizationAsync(organizationId);
+                if (!getAreaCodesResult.success)
+                {
+                    _logger.LogError("Failed to get area codes for organization: {Message}", getAreaCodesResult.message);
+                    return (false, $"Failed to get area codes for organization: {getAreaCodesResult.message}", null);
+                }
+                List<string> areaCodes = getAreaCodesResult.areaCodes;
+
+                if (areaCodes == null || areaCodes.Count == 0)
+                {
+                    _logger.LogError("No area codes found for organization", organizationId);
+                    return (false, "No area codes found for organization", null);
+                }
+
+                string areaCode = areaCodes.First();
+
                 int groupId = createGroupResponse.Result.DIDGroups.First().ID;
 
-                // 3. Search for DID
+                // 2. Search for DID
                 var searchResponse = await _apiService.GlobalDIDSearchAsync(areaCode);
                 if (searchResponse.IsFault)
                 {
@@ -55,15 +71,9 @@ namespace VoipInnovations.Core.Services
                     return (false, $"DID Search failed: {searchResponse.ResponseMessage}");
                 }
 
-                if (searchResponse.Result?.DIDs == null || !searchResponse.Result.DIDs.Any())
-                {
-                    _logger.LogWarning("No DIDs found for area code {AreaCode}", areaCode);
-                    return (false, $"No DIDs found for area code {areaCode}");
-                }
+                var didParams = new[] { new DIDParam { tn = mobileNumber } };
 
-                var didParams = new[] { new DIDParam { tn = searchResponse.Result.DIDs.First().tn } };
-
-                // 4. Reserve DID
+                // 3. Reserve DID
                 var reserveResponse = await _apiService.ReserveDIDAsync(didParams);
                 if (reserveResponse.IsFault)
                 {
@@ -71,7 +81,7 @@ namespace VoipInnovations.Core.Services
                     return (false, $"Failed to reserve DID: {reserveResponse.ResponseMessage}");
                 }
 
-                // 5. Assign DID to DID Group
+                // 4. Assign DID to DID Group
                 var assignResponse = await _apiService.AssignDIDAsync(didParams);
                 if (assignResponse.IsFault)
                 {
@@ -79,16 +89,15 @@ namespace VoipInnovations.Core.Services
                     return (false, $"Failed to assign DID to group: {assignResponse.ResponseMessage}");
                 }
 
-                // 6. Set DID Group
-
-                var setGroupResponse = await _apiService.SetDIDGroupAsync(mobileNumber, groupId);
+                // 5. Set DID Group
+                var setGroupResponse = await _apiService.SetDIDGroupAsync(searchResponse.Result.DIDs.First().tn, groupId);
                 if (setGroupResponse.IsFault)
                 {
                     _logger.LogError("Failed to set DID group: {Message}", setGroupResponse.ResponseMessage);
                     return (false, $"Failed to set DID group: {setGroupResponse.ResponseMessage}");
                 }
 
-                // 7. Config DID
+                // 6. Config DID
                 var configResponse = await _apiService.ConfigDIDAsync(didParams);
                 if (configResponse.IsFault)
                 {
@@ -96,7 +105,7 @@ namespace VoipInnovations.Core.Services
                     return (false, $"Failed to config DID: {configResponse.ResponseMessage}");
                 }
 
-                // 8. Get SMS Campaigns
+                // 7. Get SMS Campaigns
                 var getCampaignsResponse = await _apiService.GetSMSCampaignsAsync();
                 if (getCampaignsResponse.IsFault)
                 {
@@ -112,8 +121,8 @@ namespace VoipInnovations.Core.Services
 
                 string campaignId = getCampaignsResponse.Result.Campaigns.First().CampaignId;
 
-                // 9. Assign to SMS Campaign
-                var tns = new ArrayOfString { mobileNumber };
+                // 8. Assign to SMS Campaign
+                var tns = new ArrayOfString { searchResponse.Result.DIDs.First().tn };
 
                 var assignCampaignResponse = await _apiService.AssignToSMSCampaignAsync(tns, campaignId);
                 if (assignCampaignResponse.IsFault)
@@ -122,8 +131,8 @@ namespace VoipInnovations.Core.Services
                     return (false, $"Failed to assign DID to SMS campaign: {assignCampaignResponse.ResponseMessage}");
                 }
 
-                _logger.LogInformation("DID Activation successful for TN {TN}", mobileNumber);
-                return (true, $"DID Activation successful for TN {mobileNumber}");
+                _logger.LogInformation("DID Activation successful for TN {TN}", searchResponse.Result.DIDs.First().tn);
+                return (true, $"DID Activation successful for TN {searchResponse.Result.DIDs.First().tn}");
             }
             catch (Exception ex)
             {
@@ -131,4 +140,36 @@ namespace VoipInnovations.Core.Services
                 return (false, $"Exception during DID activation: {ex.Message}");
             }
         }
+
+        public async Task<(bool success, string message)> DeactivateDID(string didNumber)
+        {
+            try
+            {
+                // 1. Remove DID Group
+                var removeGroupResponse = await _apiService.RemoveDIDGroupAsync(didNumber);
+                if (removeGroupResponse.IsFault)
+                {
+                    _logger.LogError("Failed to remove DID from group: {Message}", removeGroupResponse.ResponseMessage);
+                    return (false, $"Failed to remove DID from group: {removeGroupResponse.ResponseMessage}");
+                }
+
+                // 2. Release DID
+                var didParams = new[] { new DIDParam { tn = didNumber } };
+                var releaseResponse = await _apiService.ReleaseDIDAsync(didParams);
+                if (releaseResponse.IsFault)
+                {
+                    _logger.LogError("Failed to release DID: {Message}", releaseResponse.ResponseMessage);
+                    return (false, $"Failed to release DID: {releaseResponse.ResponseMessage}");
+                }
+
+                _logger.LogInformation("DID Deactivation successful for TN {TN}", didNumber);
+                return (true, $"DID Deactivation successful for TN {didNumber}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception during DID deactivation");
+                return (false, $"Exception during DID deactivation: {ex.Message}");
+            }
+        }
     }
+}
