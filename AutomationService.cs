@@ -37,18 +37,21 @@ namespace VoipInnovations.Core.Services
                     return (false, $"Failed to create DID group: {createGroupResponse.ResponseMessage}");
                 }
 
+                // Ensure createGroupResponse.Result is not null before accessing ID
+                if (createGroupResponse.Result?.DIDGroups == null || !createGroupResponse.Result.DIDGroups.Any())
+                {
+                    _logger.LogError("DID Group creation did not return DID Group ID.");
+                    return (false, "DID Group creation did not return a DID Group ID");
+                }
+
+                int groupId = createGroupResponse.Result.DIDGroups.First().ID;
+
                 // 2. Search for DID
                 var searchResponse = await _apiService.GlobalDIDSearchAsync(areaCode);
                 if (searchResponse.IsFault)
                 {
                     _logger.LogError("DID Search failed: {Message}", searchResponse.ResponseMessage);
                     return (false, $"DID Search failed: {searchResponse.ResponseMessage}");
-                }
-
-                if (searchResponse.Result?.DIDs == null || !searchResponse.Result.DIDs.Any())
-                {
-                    _logger.LogWarning("No DIDs found for area code {AreaCode}", areaCode);
-                    return (false, $"No DIDs found for area code {areaCode}");
                 }
 
                 var didParams = new[] { new DIDParam { tn = searchResponse.Result.DIDs.First().tn } };
